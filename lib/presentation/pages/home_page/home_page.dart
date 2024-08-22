@@ -5,35 +5,53 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_recruitment_task/models/products_page.dart';
 import 'package:flutter_recruitment_task/presentation/pages/home_page/home_cubit.dart';
 import 'package:flutter_recruitment_task/presentation/widgets/big_text.dart';
+import 'package:flutter_recruitment_task/repositories/products_repository.dart';
+import 'package:scrollview_observer/scrollview_observer.dart';
 
 const _mainPadding = EdgeInsets.all(16.0);
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({
+    super.key,
+    this.scrollToProductId,
+    required this.productsRepository,
+  });
+
+  final String? scrollToProductId;
+  final ProductsRepository productsRepository;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const BigText('Products'),
-      ),
-      body: Padding(
-        padding: _mainPadding,
-        child: BlocBuilder<HomeCubit, HomeState>(
-          builder: (context, state) {
-            return switch (state) {
-              Error() => BigText('Error: ${state.error}'),
-              Loading() => const BigText('Loading...'),
-              Loaded() => _LoadedWidget(state: state),
-            };
-          },
+    return BlocProvider(
+      create: (context) {
+        if (scrollToProductId != null) {
+          return HomeCubit(productsRepository)
+            ..findProductById(scrollToProductId!);
+        }
+        return HomeCubit(productsRepository)..getNextPage();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const BigText('Products'),
+        ),
+        body: Padding(
+          padding: _mainPadding,
+          child: BlocBuilder<HomeCubit, HomeState>(
+            builder: (context, state) {
+              return switch (state) {
+                Error() => BigText('Error: ${state.error}'),
+                Loading() => const BigText('Loading...'),
+                Loaded() => _LoadedWidget(state: state),
+              };
+            },
+          ),
         ),
       ),
     );
   }
 }
 
-class _LoadedWidget extends StatelessWidget {
+class _LoadedWidget extends StatefulWidget {
   const _LoadedWidget({
     required this.state,
   });
@@ -41,12 +59,107 @@ class _LoadedWidget extends StatelessWidget {
   final Loaded state;
 
   @override
+  State<_LoadedWidget> createState() => _LoadedWidgetState();
+}
+
+class _LoadedWidgetState extends State<_LoadedWidget> {
+  late ScrollController scrollController;
+  late SliverObserverController observerController;
+
+  BuildContext? _sliverListCtx;
+
+  Future<void> scrollToProduct(int index) {
+    return observerController.animateTo(
+      index: index,
+      duration: const Duration(seconds: 1),
+      curve: Curves.easeInOut,
+      sliverContext: _sliverListCtx,
+    );
+  }
+
+  void showNoProductFoundSnackbar(String productId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Product with given id ($productId) not found :/'),
+      ),
+    );
+  }
+
+  @override
+  void initState() {
+    scrollController = ScrollController();
+    observerController = SliverObserverController(
+      controller: scrollController,
+    );
+
+    switch (widget.state) {
+      case LoadedWithIdFound state:
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await scrollToProduct(state.indexOfFoundProduct);
+          if (mounted) {
+            context.read<HomeCubit>().scrollToProductPerformed();
+          }
+        });
+      case LoadedWithNoIdFound state:
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          showNoProductFoundSnackbar(
+            state.notFoundProductId,
+          );
+        });
+    }
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        _ProductsSliverList(state: state),
-        const _GetNextPageButton(),
-      ],
+    final scrollToProductWillBePerformed =
+        widget.state.runtimeType == LoadedWithIdFound;
+    final showNextPageButton = !widget.state.hasReachedMax;
+
+    return BlocListener<HomeCubit, HomeState>(
+      listenWhen: (previous, current) => current is LoadedWithIdFound,
+      listener: (context, state) async {
+        final loadedWithIdFoundState = state as LoadedWithIdFound;
+        await scrollToProduct(loadedWithIdFoundState.indexOfFoundProduct);
+        if (context.mounted) {
+          context.read<HomeCubit>().scrollToProductPerformed();
+        }
+      },
+      child: BlocListener<HomeCubit, HomeState>(
+        listenWhen: (previous, current) => current is LoadedWithNoIdFound,
+        listener: (context, state) {
+          final loadedWithNoIdFoundState = state as LoadedWithNoIdFound;
+          showNoProductFoundSnackbar(
+              loadedWithNoIdFoundState.notFoundProductId);
+        },
+        child: NotificationListener<SliverItemContextNotification>(
+          onNotification: (notification) {
+            _sliverListCtx ??= notification.sliverItemContext;
+            return true;
+          },
+          child: SliverViewObserver(
+            controller: observerController,
+            child: CustomScrollView(
+              cacheExtent:
+                  scrollToProductWillBePerformed ? double.maxFinite : null,
+              controller: scrollController,
+              slivers: [
+                _ProductsSliverList(state: widget.state),
+                if (showNextPageButton) const _GetNextPageButton(),
+              ],
+            ),
+            sliverContexts: () => [
+              if (_sliverListCtx != null) _sliverListCtx!,
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -65,10 +178,23 @@ class _ProductsSliverList extends StatelessWidget {
 
     return SliverList.separated(
       itemCount: products.length,
-      itemBuilder: (context, index) => _ProductCard(products[index]),
+      itemBuilder: (itemContext, index) {
+        SliverItemContextNotification(
+          sliverItemContext: itemContext,
+        ).dispatch(context);
+        return _ProductCard(products[index]);
+      },
       separatorBuilder: (context, index) => const Divider(),
     );
   }
+}
+
+class SliverItemContextNotification extends Notification {
+  SliverItemContextNotification({
+    required this.sliverItemContext,
+  });
+
+  final BuildContext sliverItemContext;
 }
 
 class _ProductCard extends StatelessWidget {
