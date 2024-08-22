@@ -105,24 +105,41 @@ class _Tags extends StatelessWidget {
   }
 }
 
-class _TagWidget extends StatelessWidget {
+class _TagWidget extends StatefulWidget {
   const _TagWidget(this.tag);
 
   final Tag tag;
 
   @override
-  Widget build(BuildContext context) {
+  State<_TagWidget> createState() => _TagWidgetState();
+}
+
+class _TagWidgetState extends State<_TagWidget>
+    with AutomaticKeepAliveClientMixin {
+  late Color color;
+
+  @override
+  void initState() {
     const possibleColors = Colors.primaries;
-    final color = possibleColors[Random().nextInt(possibleColors.length)];
+    color = possibleColors[Random().nextInt(possibleColors.length)];
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Chip(
         color: MaterialStateProperty.all(color),
-        label: Text(tag.label),
+        label: Text(widget.tag.label),
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class _GetNextPageButton extends StatelessWidget {
