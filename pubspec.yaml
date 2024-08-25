@@ -9,9 +9,13 @@ environment:
 dependencies:
   bloc: 8.1.4
   collection: ^1.18.0
+  equatable: ^2.0.5
   flutter:
     sdk: flutter
   flutter_bloc: 8.1.6
+  flutter_hooks: ^0.20.5
+  freezed: ^2.5.2
+  freezed_annotation: ^2.4.4
   json_annotation: 4.9.0
   json_serializable: 6.8.0
   scrollview_observer: ^1.21.0

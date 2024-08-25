@@ -2,9 +2,12 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_recruitment_task/models/products_filters.dart';
 import 'package:flutter_recruitment_task/models/products_page.dart';
+import 'package:flutter_recruitment_task/presentation/pages/filters_page/filters_page.dart';
 import 'package:flutter_recruitment_task/presentation/pages/home_page/home_cubit.dart';
 import 'package:flutter_recruitment_task/presentation/widgets/big_text.dart';
+import 'package:flutter_recruitment_task/presentation/widgets/page_loader.dart';
 import 'package:flutter_recruitment_task/repositories/products_repository.dart';
 import 'package:scrollview_observer/scrollview_observer.dart';
 
@@ -24,28 +27,35 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (context) {
-        if (scrollToProductId != null) {
-          return HomeCubit(productsRepository)
-            ..findProductById(scrollToProductId!);
-        }
-        return HomeCubit(productsRepository)..getNextPage();
+        return HomeCubit(productsRepository)
+          ..init(
+            scrollToProductId: scrollToProductId,
+          );
       },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const BigText('Products'),
-        ),
-        body: Padding(
-          padding: _mainPadding,
-          child: BlocBuilder<HomeCubit, HomeState>(
-            builder: (context, state) {
-              return switch (state) {
+      child: BlocBuilder<HomeCubit, HomeState>(
+        builder: (context, state) {
+          return Scaffold(
+            appBar: AppBar(
+              title: const BigText('Products'),
+              actions: [
+                if (state case Loaded _)
+                  _FiltersButton(
+                    isFiltersActive: state.areFiltersActive,
+                    currentFilters: state.currentFilters!,
+                    defaultFilters: state.defaultFilters!,
+                  ),
+              ],
+            ),
+            body: Padding(
+              padding: _mainPadding,
+              child: switch (state) {
                 Error() => BigText('Error: ${state.error}'),
-                Loading() => const BigText('Loading...'),
+                Loading() => const PageLoader(),
                 Loaded() => _LoadedWidget(state: state),
-              };
-            },
-          ),
-        ),
+              },
+            ),
+          );
+        },
       ),
     );
   }
@@ -118,18 +128,19 @@ class _LoadedWidgetState extends State<_LoadedWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final scrollToProductWillBePerformed =
-        widget.state.runtimeType == LoadedWithIdFound;
+    final scrollToProductWillBePerformed = widget.state is LoadedWithIdFound;
     final showNextPageButton = !widget.state.hasReachedMax;
 
     return BlocListener<HomeCubit, HomeState>(
       listenWhen: (previous, current) => current is LoadedWithIdFound,
       listener: (context, state) async {
         final loadedWithIdFoundState = state as LoadedWithIdFound;
-        await scrollToProduct(loadedWithIdFoundState.indexOfFoundProduct);
-        if (context.mounted) {
-          context.read<HomeCubit>().scrollToProductPerformed();
-        }
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await scrollToProduct(loadedWithIdFoundState.indexOfFoundProduct);
+          if (context.mounted) {
+            context.read<HomeCubit>().scrollToProductPerformed();
+          }
+        });
       },
       child: BlocListener<HomeCubit, HomeState>(
         listenWhen: (previous, current) => current is LoadedWithNoIdFound,
@@ -171,11 +182,7 @@ class _ProductsSliverList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final products = state.pages
-        .map((page) => page.products)
-        .expand((product) => product)
-        .toList();
-
+    final products = state.products;
     return SliverList.separated(
       itemCount: products.length,
       itemBuilder: (itemContext, index) {
@@ -210,6 +217,7 @@ class _ProductCard extends StatelessWidget {
         children: [
           BigText(product.name),
           _Tags(product: product),
+          Text('Price: ${product.currentPrice.amount}'),
         ],
       ),
     );
@@ -278,6 +286,42 @@ class _GetNextPageButton extends StatelessWidget {
         onPressed: context.read<HomeCubit>().getNextPage,
         child: const BigText('Get next page'),
       ),
+    );
+  }
+}
+
+class _FiltersButton extends StatelessWidget {
+  const _FiltersButton({
+    required this.currentFilters,
+    required this.defaultFilters,
+    required this.isFiltersActive,
+  });
+
+  final ProductsFilters currentFilters;
+  final ProductsFilters defaultFilters;
+  final bool isFiltersActive;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(
+        isFiltersActive ? Icons.filter_alt_outlined : Icons.filter_alt_off,
+      ),
+      tooltip: 'Filters',
+      onPressed: () async {
+        final filters = await Navigator.push<ProductsFilters?>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FiltersPage(
+              defaultFilters: defaultFilters,
+              currentFilters: currentFilters,
+            ),
+          ),
+        );
+        if (context.mounted && filters != null) {
+          context.read<HomeCubit>().applyFilters(filters);
+        }
+      },
     );
   }
 }

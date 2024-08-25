@@ -1,5 +1,7 @@
-class GetProductsPage {
-  GetProductsPage({
+import 'package:equatable/equatable.dart';
+
+class GetProductsPage extends Equatable {
+  const GetProductsPage({
     required this.pageNumber,
   });
 
@@ -8,4 +10,11 @@ class GetProductsPage {
   GetProductsPage increasePageNumber() {
     return GetProductsPage(pageNumber: pageNumber + 1);
   }
+
+  GetProductsPage reset() {
+    return const GetProductsPage(pageNumber: 1);
+  }
+
+  @override
+  List<Object?> get props => [pageNumber];
 }
