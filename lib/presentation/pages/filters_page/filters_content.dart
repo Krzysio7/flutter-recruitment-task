@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_recruitment_task/models/products_page.dart';
 import 'package:flutter_recruitment_task/presentation/pages/filters_page/filters_cubit.dart';
+import 'package:flutter_recruitment_task/presentation/widgets/app_switch_list_tile.dart';
 
 class FiltersContent extends StatelessWidget {
   const FiltersContent({
@@ -22,12 +23,12 @@ class FiltersContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Switch(
+                AppSwitchListTile(
                   label: 'Promotion only',
                   isSelected: state.currentFilters.promotionOnly,
                   onChanged: context.read<FiltersCubit>().changePromotionOnly,
                 ),
-                _Switch(
+                AppSwitchListTile(
                   label: 'Favorites only',
                   isSelected: state.currentFilters.favoritesOnly,
                   onChanged: context.read<FiltersCubit>().changeFavoritesOnly,
@@ -153,29 +154,6 @@ class _TagFilters extends StatelessWidget {
             },
           )
         ],
-      ),
-    );
-  }
-}
-
-class _Switch extends StatelessWidget {
-  const _Switch({
-    required this.isSelected,
-    required this.label,
-    required this.onChanged,
-  });
-
-  final bool isSelected;
-  final String label;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SwitchListTile(
-      title: Text(label),
-      value: isSelected,
-      onChanged: (value) => onChanged(
-        value,
       ),
     );
   }
